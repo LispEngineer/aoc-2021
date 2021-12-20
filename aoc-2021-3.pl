@@ -160,4 +160,155 @@ Power = 4006064 .
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % PART 2
 
+% Matches if the specified field (0 being first in the list)
+% has the specified value.
+list_pos_is(Index, Val, List) :-
+    nth0(Index, List, Elem),
+    Elem = Val.
 
+% TEST
+/*
+?- list_pos_is(3, 1, [0,0,0,1,1,1]).
+true.
+
+?- list_pos_is(3, 0, [0,0,0,1,1,1]).
+false.
+
+?- list_pos_is(99, 0, [0,0,0,1,1,1]).
+false.
+
+?- list_pos_is(-3, 0, [0,0,0,1,1,1]).
+false.
+
+?- list_pos_is(0, 0, [0,0,0,1,1,1]).
+true.
+*/
+
+% Filters a list of lists by the position having a certain value.
+filter_lol_by_idx_val(LoL, Index, Val, Filtered) :-
+    include(list_pos_is(Index, Val), LoL, Filtered).
+
+% TEST
+/*
+?-
+|    filter_lol_by_idx_val([[0,1],[1,0],[1,1],[0,0]], 0, 0, Result).
+Result = [[0, 1], [0, 0]].
+
+?- filter_lol_by_idx_val([[0,1],[1,0],[1,1],[0,0]], 0, 1, Result).
+Result = [[1, 0], [1, 1]].
+
+?- filter_lol_by_idx_val([[0,1],[1,0],[1,1],[0,0]], 1, 0, Result).
+Result = [[1, 0], [0, 0]].
+
+?- filter_lol_by_idx_val([[0,1],[1,0],[1,1],[0,0]], 1, 1, Result).
+Result = [[0, 1], [1, 1]].
+
+?- filter_lol_by_idx_val([[0,1],[1,0],[1,1],[0,0]], 1, 2, Result).
+Result = [].
+*/
+
+% Here is the procedure:
+% 1. Start with the full list
+% 2. Filter out entries based on each bit starting with the first (index
+%    0)
+% 3. Find the most common entry for that bit
+
+% Which bit should we keep if we're doing oxygen generator rating,
+% based on the number of 1s found and the total number of entries.
+% Note that the CO2 scrubber is exactly the opposite.
+oxygen_generator_keep(CountOnes, CountAll, Keep) :-
+    CountZeros is CountAll - CountOnes,
+    CountZeros =< CountOnes,
+    Keep is 1, !.
+oxygen_generator_keep(CountOnes, CountAll, Keep) :-
+    CountZeros is CountAll - CountOnes,
+    CountZeros > CountOnes,
+    Keep is 0.
+
+bit_flip(1, 0).
+bit_flip(0, 1).
+
+% Filter a single bit for oxygen generator.
+% BitNum starts at 0.
+% LoL is a list of lists
+% Undefined behavior if BitNum is more than any entry in the List of
+% Lists.
+bit_filter_oxygen_generator(BitNum, LoL, Filtered) :-
+    % How many entries are there
+    length(LoL, Len),
+    % We only filter if we have more than one entry
+    Len > 1,
+    % Get just the bits under consideration
+    maplist(nth0(BitNum), LoL, BitFiltered),
+    % How many ones are there?
+    foldl(plus, BitFiltered, 0, CountOnes),
+    % Which bit to keep?
+    oxygen_generator_keep(CountOnes, Len, BitToKeep),
+    % print("Bit to keep: "), print(BitToKeep), nl,
+    % Now filter out keeping just those bits
+    filter_lol_by_idx_val(LoL, BitNum, BitToKeep, Filtered).
+
+% Base case, if the input is empty or only has one item.
+bit_filter_oxygen_generator(_BitNum, LoL, Filtered) :-
+    % How many entries are there (can be LoL or BitFiltered)
+    length(LoL, Len),
+    % We only filter if we have more than one entry
+    Len =< 1,
+    Filtered is LoL.
+
+% TEST (works, but brute force)
+/*
+?- read_file_as_strings("C:/Users/Doug/src/prolog/aoc-2021-test-3.txt", DR),  maplist(string_to_num_list, DR, DRasNL), bit_filter_oxygen_generator(0, DRasNL, Out0), bit_filter_oxygen_generator(1, Out0, Out1), bit_filter_oxygen_generator(2, Out1, Out2), bit_filter_oxygen_generator(3, Out2, Out3), bit_filter_oxygen_generator(4, Out3, Out4).
+DR = ["00100", "11110", "10110", "10111", "10101", "01111", "00111", "11100", "10000"|...],
+DRasNL = [[0, 0, 1, 0, 0], [1, 1, 1, 1, 0], [1, 0, 1, 1, 0], [1, 0, 1, 1, 1], [1, 0, 1, 0|...], [0, 1, 1|...], [0, 0|...], [1|...], [...|...]|...],
+Out0 = [[1, 1, 1, 1, 0], [1, 0, 1, 1, 0], [1, 0, 1, 1, 1], [1, 0, 1, 0, 1], [1, 1, 1, 0|...], [1, 0, 0|...], [1, 1|...]],
+Out1 = [[1, 0, 1, 1, 0], [1, 0, 1, 1, 1], [1, 0, 1, 0, 1], [1, 0, 0, 0, 0]],
+Out2 = [[1, 0, 1, 1, 0], [1, 0, 1, 1, 1], [1, 0, 1, 0, 1]],
+Out3 = [[1, 0, 1, 1, 0], [1, 0, 1, 1, 1]],
+Out4 = [[1, 0, 1, 1, 1]] .
+*/
+
+% list(numblist). will show you how numlist/2 is made.
+
+% Filter the list bit by bit down to one entry
+list_filter_oxygen_generator_rating(LoL, FinalBits) :-
+    % Find number of bits
+    [First|_] = LoL,
+    length(First, NumBits),
+    MaxBit is NumBits - 1,
+    % Make a list from 0 to the maximum bit inclusive
+    numlist(0, MaxBit, BitIndexes),
+    % Now we filter NumBits times, each time with the output of the
+    % filter becoming the input to the next stage.
+    foldl(bit_filter_oxygen_generator, BitIndexes, LoL, Filtered),
+    % TODO: Check that there is exactly one!
+    [FinalBits|_] = Filtered.
+
+% CORRECT TEST
+/*
+?- read_file_as_strings("C:/Users/Doug/src/prolog/aoc-2021-test-3.txt", DR),  maplist(string_to_num_list, DR, DRasNL), list_filter_oxygen_generator_rating(DRasNL, Out).
+DR = ["00100", "11110", "10110", "10111", "10101", "01111", "00111", "11100", "10000"|...],
+DRasNL = [[0, 0, 1, 0, 0], [1, 1, 1, 1, 0], [1, 0, 1, 1, 0], [1, 0, 1, 1, 1], [1, 0, 1, 0|...], [0, 1, 1|...], [0, 0|...], [1|...], [...|...]|...],
+Out = [1, 0, 1, 1, 1] .
+*/
+
+% Get the oxygen generator numeric rating from the Diagnostic Report.
+oxygen_generator_rating(DR, Rating) :-
+    list_filter_oxygen_generator_rating(DR, BitRating),
+    print("BitRating: "), print(BitRating), nl,
+    bits_to_number(BitRating, Rating).
+
+% TEST (CORRECT, see example)
+/*
+?- read_file_as_strings("C:/Users/Doug/src/prolog/aoc-2021-test-3.txt", DR),  maplist(string_to_num_list, DR, DRasNL), print(DRasNL), nl, oxygen_generator_rating(DRasNL, Out).
+[[0,0,1,0,0],[1,1,1,1,0],[1,0,1,1,0],[1,0,1,1,1],[1,0,1,0,1],[0,1,1,1,1],[0,0,1,1,1],[1,1,1,0,0],[1,0,0,0,0],[1,1,0,0,1],[0,0,0,1,0],[0,1,0,1,0]]
+"BitRating: "[1,0,1,1,1]
+DR = ["00100", "11110", "10110", "10111", "10101", "01111", "00111", "11100", "10000"|...],
+DRasNL = [[0, 0, 1, 0, 0], [1, 1, 1, 1, 0], [1, 0, 1, 1, 0], [1, 0, 1, 1, 1], [1, 0, 1, 0|...], [0, 1, 1|...], [0, 0|...], [1|...], [...|...]|...],
+Out = 23 .
+*/
+
+
+% TODO: Generalize the above to take the filtering function so it can be
+% made higher-order to calculate the nearly identical CO2 scrubber
+% rating.
